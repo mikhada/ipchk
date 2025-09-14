@@ -70,7 +70,7 @@ fn ping_windows_icmp(ipv4: Ipv4Addr, timeout: Duration, count: u32) -> bool {
 
     unsafe {
         let h: HANDLE = IcmpCreateFile();
-        if h == 0 {
+        if h.is_null() {
             return false;
         }
 
