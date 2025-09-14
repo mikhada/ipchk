@@ -1,0 +1,23 @@
+[package]
+name = "ipchk"
+version = "0.1.0"
+edition = "2024"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_NetworkManagement_IpHelper","Win32_Foundation"] }
+
+[profile.dev]
+opt-level = 1
+debug = true
+strip = "symbols"
+lto = false
+codegen-units = 2
+panic = "unwind"
+
+[profile.release]
+opt-level = "s"
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+
