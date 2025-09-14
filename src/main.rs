@@ -102,7 +102,13 @@ fn ping_windows_icmp(ipv4: Ipv4Addr, timeout: Duration, count: u32) -> bool {
     }
 }
 
-fn ping_one(ip_str: String, tx: mpsc::Sender<PingResult>, timeout: Duration, count: u32) {
+fn ping_one(
+    ip_str: String,
+    tx: mpsc::Sender<PingResult>,
+    timeout: Duration,
+    count: u32,
+    raw: bool,
+) {
     let parsed = match parse_ip(&ip_str) {
         Some(ip) => ip,
         None => {
@@ -134,10 +140,18 @@ fn ping_one(ip_str: String, tx: mpsc::Sender<PingResult>, timeout: Duration, cou
     #[cfg(not(windows))]
     let up = ping_unix_cmd(&ip_str, timeout, count);
 
-    let msg = if up {
-        format!("\x1b[1m{}\x1b[0m is \x1b[1m\x1b[32mup\x1b[0m", ip_str)
+    let msg = if raw {
+        if up {
+            format!("{ip_str} is up")
+        } else {
+            format!("{ip_str} is down")
+        }
     } else {
-        format!("\x1b[0m{}\x1b[0m is \x1b[1m\x1b[31mdown\x1b[0m", ip_str)
+        if up {
+            format!("\x1b[1m{}\x1b[0m is \x1b[1m\x1b[32mup\x1b[0m", ip_str)
+        } else {
+            format!("\x1b[0m{}\x1b[0m is \x1b[1m\x1b[31mdown\x1b[0m", ip_str)
+        }
     };
 
     let _ = tx.send(PingResult {
@@ -155,6 +169,7 @@ struct Args {
     count: u32,                          // -n/--count probes per host
     concurrency: usize,                  // -c/--concurrency
     ips: Vec<String>,                    // positional IPs
+    raw: bool,                           // -a/--ascii/--raw
 }
 
 fn usage(program: &str) -> String {
@@ -165,14 +180,17 @@ fn usage(program: &str) -> String {
 
 Options:
   -r, --range            Upper- and lower-limit IPv4 addresses (inclusive)
+  -a, --ascii, --raw     Force plain ASCII output (no colours)
   -t, --timeout          Per-probe timeout in milliseconds (default: {dto})
   -n, --count            Probes per host; succeed on first reply (default: {dn})
   -c, --concurrency      Max simultaneous hosts in flight (default: {dc})
   -h, --help             Show this help
+  --version              Show version information
 
 Examples:
   {p} 192.168.1.1 192.168.1.2 1.1.1.1
   {p} -r 172.16.0.1 172.16.1.254 -t 750 -n 3 -c 256
+  {p} -r 10.0.0.1 10.0.0.254 --ascii
 ",
         p = program,
         dto = DEFAULT_TIMEOUT_MS,
@@ -187,6 +205,31 @@ fn parse_args() -> Result<Args, String> {
 
     if pargs.contains(["-h", "--help"]) {
         return Err(usage(&program));
+    }
+
+    if pargs.contains("--version") {
+        let name = env!("CARGO_PKG_NAME");
+        let ver = env!("CARGO_PKG_VERSION");
+        let desc = option_env!("CARGO_PKG_DESCRIPTION").unwrap_or("");
+        let repo = option_env!("CARGO_PKG_REPOSITORY").unwrap_or("");
+        //let authors = option_env!("CARGO_PKG_AUTHORS").unwrap_or("");
+        let build = option_env!("BUILD_DATE").unwrap_or("unknown");
+
+        let mut msg = format!("{name} v{ver}");
+        if !desc.is_empty() {
+            msg.push_str(&format!("\n{desc}"));
+        }
+        msg.push_str(&format!("\nBuilt: {build}"));
+        //if !authors.is_empty() {
+        //    msg.push_str(&format!("\n\nAuthors: {authors}"));
+        //}
+        if !repo.is_empty() {
+            msg.push_str(&format!(
+                "\n\nFind more information on the official repository:\n{repo}"
+            ));
+        }
+
+        return Err(msg);
     }
 
     let timeout_ms = pargs
@@ -207,6 +250,9 @@ fn parse_args() -> Result<Args, String> {
         .max(1);
 
     let range_mode = pargs.contains(["-r", "--range"]);
+
+    let raw = pargs.contains(["-a", "--ascii"]) || pargs.contains("--raw");
+
     let free: Vec<std::ffi::OsString> = pargs.finish();
 
     if range_mode {
@@ -228,6 +274,7 @@ fn parse_args() -> Result<Args, String> {
             timeout_ms,
             count,
             concurrency,
+            raw,
             ips: Vec::new(),
         })
     } else {
@@ -246,6 +293,7 @@ fn parse_args() -> Result<Args, String> {
             count,
             concurrency,
             ips,
+            raw,
         })
     }
 }
@@ -289,6 +337,7 @@ fn main() {
 
     let timeout = Duration::from_millis(args.timeout_ms);
     let count = args.count;
+    let raw = args.raw;
 
     let (tx, rx) = mpsc::channel::<PingResult>();
 
@@ -299,7 +348,8 @@ fn main() {
             let txc = tx.clone();
             let tmo = timeout;
             let cnt = count;
-            handles.push(thread::spawn(move || ping_one(ip, txc, tmo, cnt)));
+            let asc = raw;
+            handles.push(thread::spawn(move || ping_one(ip, txc, tmo, cnt, asc)));
         }
         for h in handles {
             let _ = h.join();
