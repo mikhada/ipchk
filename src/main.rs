@@ -180,11 +180,12 @@ fn usage(program: &str) -> String {
 
 Options:
   -r, --range            Upper- and lower-limit IPv4 addresses (inclusive)
-  -a, --raw, --ascii     Force plain ASCII output (no colours)
+  -a, --ascii, --raw     Force plain ASCII output (no colours)
   -t, --timeout          Per-probe timeout in milliseconds (default: {dto})
   -n, --count            Probes per host; succeed on first reply (default: {dn})
   -c, --concurrency      Max simultaneous hosts in flight (default: {dc})
   -h, --help             Show this help
+  --version              Show version information
 
 Examples:
   {p} 192.168.1.1 192.168.1.2 1.1.1.1
@@ -204,6 +205,31 @@ fn parse_args() -> Result<Args, String> {
 
     if pargs.contains(["-h", "--help"]) {
         return Err(usage(&program));
+    }
+
+    if pargs.contains("--version") {
+        let name = env!("CARGO_PKG_NAME");
+        let ver = env!("CARGO_PKG_VERSION");
+        let desc = option_env!("CARGO_PKG_DESCRIPTION").unwrap_or("");
+        let repo = option_env!("CARGO_PKG_REPOSITORY").unwrap_or("");
+        //let authors = option_env!("CARGO_PKG_AUTHORS").unwrap_or("");
+        let build = option_env!("BUILD_DATE").unwrap_or("unknown");
+
+        let mut msg = format!("{name} v{ver}");
+        if !desc.is_empty() {
+            msg.push_str(&format!("\n{desc}"));
+        }
+        msg.push_str(&format!("\nBuilt: {build}"));
+        //if !authors.is_empty() {
+        //    msg.push_str(&format!("\n\nAuthors: {authors}"));
+        //}
+        if !repo.is_empty() {
+            msg.push_str(&format!(
+                "\n\nFind more information on the official repository:\n{repo}"
+            ));
+        }
+
+        return Err(msg);
     }
 
     let timeout_ms = pargs

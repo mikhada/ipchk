@@ -3,8 +3,17 @@ name = "ipchk"
 version = "0.2.0"
 edition = "2024"
 
+description = "A lightweight, parallel ICMP up/down detector"
+repository = "https://github.com/mikhada/ipchk"
+authors = ["Aaron Johnson (GitHub: Mikhada)"]
+license = "Apache-2.0"
+build = "build.rs"
+
 [dependencies]
 pico-args = "0.5"
+
+[build-dependencies]
+time = { version = "0.3", features = ["formatting"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_NetworkManagement_IpHelper","Win32_Foundation"] }
