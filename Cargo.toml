@@ -3,6 +3,9 @@ name = "ipchk"
 version = "0.1.0"
 edition = "2024"
 
+[dependencies]
+pico-args = "0.5"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_NetworkManagement_IpHelper","Win32_Foundation"] }
 
@@ -20,4 +23,3 @@ strip = true
 lto = true
 codegen-units = 1
 panic = "abort"
-
