@@ -65,7 +65,7 @@ fn ping_windows_icmp(ipv4: Ipv4Addr, timeout: Duration, count: u32) -> bool {
     use std::ffi::c_void;
     use windows_sys::Win32::Foundation::HANDLE;
     use windows_sys::Win32::NetworkManagement::IpHelper::{
-        IcmpCloseHandle, IcmpCreateFile, IcmpSendEcho,
+        ICMP_ECHO_REPLY, IcmpCloseHandle, IcmpCreateFile, IcmpSendEcho,
     };
 
     unsafe {
@@ -74,14 +74,19 @@ fn ping_windows_icmp(ipv4: Ipv4Addr, timeout: Duration, count: u32) -> bool {
             return false;
         }
 
+        // Destination in network byte order
         let addr_u32 = u32::from(ipv4).to_be();
-        let req: [u8; 8] = [0x61; 8];
-        let mut reply = [0u8; 64];
 
-        let mut ok_any = false;
+        // Small payload and reply buffer (ICMP_ECHO_REPLY + payload bytes)
+        let req: [u8; 8] = [0x61; 8];
+        let reply_len = std::mem::size_of::<ICMP_ECHO_REPLY>() + req.len();
+        let mut reply = vec![0u8; reply_len];
+
         let tries = count.max(1);
+        let mut ok_any = false;
+
         for _ in 0..tries {
-            let ok = IcmpSendEcho(
+            let ret = IcmpSendEcho(
                 h,
                 addr_u32,
                 req.as_ptr() as *const c_void,
@@ -90,11 +95,19 @@ fn ping_windows_icmp(ipv4: Ipv4Addr, timeout: Duration, count: u32) -> bool {
                 reply.as_mut_ptr() as *mut c_void,
                 reply.len() as u32,
                 timeout.as_millis().min(u128::from(u32::MAX)) as u32,
-            ) > 0;
-            if ok {
-                ok_any = true;
-                break;
+            );
+
+            if ret > 0 {
+                // Interpret the first ICMP_ECHO_REPLY
+                let echo: &ICMP_ECHO_REPLY = &*(reply.as_ptr() as *const ICMP_ECHO_REPLY);
+                // IP_SUCCESS == 0
+                if echo.Status == 0 {
+                    ok_any = true;
+                    break;
+                }
+                // else: got a reply structure with a failure Status; keep trying
             }
+            // ret == 0 → timed out; keep trying
         }
 
         IcmpCloseHandle(h);
